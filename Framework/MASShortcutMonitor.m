@@ -17,15 +17,20 @@ static OSStatus MASCarbonEventCallback(EventHandlerCallRef, EventRef, void*);
     self = [super init];
     [self setHotKeys:[NSMutableDictionary dictionary]];
 
-    EventTypeSpec hotKeyPressedSpec = { .eventClass = kEventClassKeyboard, .eventKind = kEventHotKeyPressed };
-    EventTypeSpec hotKeyReleasedSpec = { .eventClass = kEventClassKeyboard, .eventKind = kEventHotKeyReleased };
+    OSStatus status = [self installEventHandlersWithKeyup:NO];
 
-    struct EventTypeSpec *eventTypeSpecs = malloc(sizeof(struct EventTypeSpec) * 2);
-    eventTypeSpecs[0] = hotKeyPressedSpec;
-    eventTypeSpecs[1] = hotKeyReleasedSpec;
+    if (status != noErr) {
+        return nil;
+    }
+    return self;
+}
 
-    OSStatus status = InstallEventHandler(GetEventDispatcherTarget(), MASCarbonEventCallback,
-        2, eventTypeSpecs, (__bridge void*)self, &_eventHandlerRef);
+- (instancetype) initWithKeyUp
+{
+    self = [super init];
+    [self setHotKeys:[NSMutableDictionary dictionary]];
+
+    OSStatus status = [self installEventHandlersWithKeyup:YES];
 
     if (status != noErr) {
         return nil;
@@ -50,6 +55,50 @@ static OSStatus MASCarbonEventCallback(EventHandlerCallRef, EventRef, void*);
     });
     return sharedInstance;
 }
+
++ (instancetype) sharedMonitorWithKeyUp
+{
+    static dispatch_once_t once;
+    static MASShortcutMonitor *sharedInstance;
+    dispatch_once(&once, ^{
+        sharedInstance = [[self alloc] initWithKeyUp];
+    });
+    return sharedInstance;
+}
+
+- (OSStatus) installEventHandlersWithKeyup: (BOOL) keyUp
+{
+    EventTypeSpec hotKeyPressedSpec = { .eventClass = kEventClassKeyboard, .eventKind = kEventHotKeyPressed };
+    
+
+    OSStatus status;
+    
+    if (keyUp) {
+        EventTypeSpec hotKeyReleasedSpec = { .eventClass = kEventClassKeyboard, .eventKind = kEventHotKeyReleased };
+        struct EventTypeSpec *eventTypeSpecs = malloc(sizeof(struct EventTypeSpec) * 2);
+        eventTypeSpecs[0] = hotKeyPressedSpec;
+        eventTypeSpecs[1] = hotKeyReleasedSpec;
+        
+        status = [self installEventHandlers:2 withEventTypeSpecs:eventTypeSpecs];
+    } else {
+        status = [self installEventHandlers:1 withEventTypeSpecs:&hotKeyPressedSpec];
+    }
+    
+    return status;
+}
+
+- (OSStatus) installEventHandlers: (int) itemCount withEventTypeSpecs: (EventTypeSpec *) eventTypeSpecs
+{
+    OSStatus status = InstallEventHandler(GetEventDispatcherTarget(),
+                                          MASCarbonEventCallback,
+                                          itemCount,
+                                          eventTypeSpecs,
+                                          (__bridge void*)self,
+                                          &_eventHandlerRef);
+    
+    return status;
+}
+
 
 #pragma mark Registration
 
